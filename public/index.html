@@ -52,15 +52,19 @@
             </div>
             <form id="uploadForm">
                 <div class="form-group">
-                    <label for="project">Selecione o Projeto</label>
-                    <select id="project" class="form-control" required>
-                        <option value="inglescurso">Inglês Curso</option>
-                        <option value="multivozes">Multivozes</option>
-                        <option value="lessonplan">Lesson Plan</option>
-                        <option value="veroclass">VeroClass</option>
-                        <option value="nebulaflix">NebulaFlix</option>
-                        <option value="outros">Outros Projetos</option>
+                    <label for="project">Categoria / Projeto</label>
+                    <select id="project" class="form-control" onchange="toggleCustomProject(this.value)" required>
+                        <option value="geral">Geral</option>
+                        <option value="imagens">Imagens</option>
+                        <option value="documentos">Documentos</option>
+                        <option value="audios">Audios</option>
+                        <option value="videos">Videos</option>
+                        <option value="custom">+ Nova Categoria / Pasta...</option>
                     </select>
+                </div>
+                <div class="form-group" id="customProjectGroup" style="display: none;">
+                    <label for="customProject">Nome da Nova Categoria (Sem espacos/acentos)</label>
+                    <input type="text" id="customProject" class="form-control" placeholder="ex: banners-2026" pattern="[a-zA-Z0-9_-]{1,64}">
                 </div>
                 <div class="form-group">
                     <label for="file">Selecione os Arquivos</label>
@@ -75,6 +79,20 @@
     <script src="auth.js"></script>
     
     <script>
+    function toggleCustomProject(val) {
+        const group = document.getElementById('customProjectGroup');
+        const input = document.getElementById('customProject');
+        if (val === 'custom') {
+            group.style.display = 'block';
+            input.required = true;
+            input.focus();
+        } else {
+            group.style.display = 'none';
+            input.required = false;
+            input.value = '';
+        }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
         AuthManager.requireAuth();
     });
@@ -90,6 +108,17 @@
         
         const token = await AuthManager.requireAuth();
         
+        let project = document.getElementById('project').value;
+        if (project === 'custom') {
+            const customVal = document.getElementById('customProject').value.trim().toLowerCase();
+            const safeProject = customVal.replace(/[^a-zA-Z0-9_-]/g, '-');
+            if (!safeProject) {
+                alert('Informe um nome valido para a categoria.');
+                return;
+            }
+            project = safeProject;
+        }
+
         submitBtn.disabled = true;
         let successCount = 0;
         let errorCount = 0;
@@ -97,7 +126,6 @@
         
         const files = Array.from(fileInput.files);
         const totalFiles = files.length;
-        const project = document.getElementById('project').value;
         
         resultDiv.className = 'alert alert-info show';
         
@@ -146,7 +174,7 @@
         
         if (successCount > 0 && errorCount === 0) {
             resultDiv.className = 'alert alert-success show';
-            resultDiv.innerHTML = `<strong>Todos os ${successCount} uploads concluídos!</strong><div class="result-urls">${resultsHtml}</div>`;
+            resultDiv.innerHTML = `<strong>Todos os ${successCount} uploads concluidos!</strong><div class="result-urls">${resultsHtml}</div>`;
             fileInput.value = '';
         } else {
             resultDiv.className = 'alert alert-error show';

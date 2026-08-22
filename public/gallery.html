@@ -80,13 +80,7 @@
         <div class="dashboard-header">
             <div class="filters">
                 <select id="projectFilter" onchange="loadGallery()">
-                    <option value="all">Todos os Projetos</option>
-                    <option value="inglescurso">Inglês Curso</option>
-                    <option value="multivozes">Multivozes</option>
-                    <option value="lessonplan">Lesson Plan</option>
-                    <option value="veroclass">VeroClass</option>
-                    <option value="nebulaflix">NebulaFlix</option>
-                    <option value="outros">Outros Projetos</option>
+                    <option value="all">Todas as Categorias</option>
                 </select>
             </div>
             <div class="stats-card" id="statsCard" style="opacity: 0.5;">
@@ -108,7 +102,7 @@
                 <div class="rename-section">
                     <label>Renomear arquivo (D1 + GitHub):</label>
                     <div class="rename-group">
-                        <input type="text" id="renameInput" class="rename-input" placeholder="Novo nome sem extensão">
+                        <input type="text" id="renameInput" class="rename-input" placeholder="Novo nome sem extensao">
                         <button class="btn-save-rename" id="btnSubmitRename" onclick="submitRename()">Salvar</button>
                     </div>
                 </div>
@@ -125,6 +119,7 @@
     <script src="auth.js"></script>
     <script>
         let currentImage = null;
+        let knownProjects = new Set();
         
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
@@ -146,6 +141,27 @@
             } catch (err) {}
         }
 
+        function updateProjectFilterOptions(uploads) {
+            const filterSelect = document.getElementById('projectFilter');
+            const currentSelected = filterSelect.value;
+            let updated = false;
+
+            uploads.forEach(img => {
+                if (img.project_key && !knownProjects.has(img.project_key)) {
+                    knownProjects.add(img.project_key);
+                    const opt = document.createElement('option');
+                    opt.value = img.project_key;
+                    opt.textContent = img.project_name || img.project_key;
+                    filterSelect.appendChild(opt);
+                    updated = true;
+                }
+            });
+
+            if (updated) {
+                filterSelect.value = currentSelected;
+            }
+        }
+
         async function loadGallery() {
             const token = await AuthManager.requireAuth();
             const project = document.getElementById('projectFilter').value;
@@ -155,12 +171,13 @@
             
             try {
                 const res = await fetch(`/api/uploads?project=${project}`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!res.ok) throw new Error(res.status === 401 ? 'Não autorizado' : 'Erro na API');
+                if (!res.ok) throw new Error(res.status === 401 ? 'Nao autorizado' : 'Erro na API');
                 
                 const data = await res.json();
                 if (!data.uploads || data.uploads.length === 0) return grid.innerHTML = '<div class="loading">Nenhum arquivo encontrado.</div>';
                 
                 window.galleryData = data.uploads;
+                updateProjectFilterOptions(data.uploads);
                 
                 grid.innerHTML = data.uploads.map((img, index) => {
                     const ext = img.file_extension ? img.file_extension.toLowerCase() : img.file_name.split('.').pop().toLowerCase();
@@ -170,11 +187,11 @@
                     if (isImage) {
                         visualHtml = `<img src="${img.cdn_url}" class="card-thumb-img" loading="lazy">`;
                     } else if (ext === 'pdf') {
-                        visualHtml = `<div class="card-thumb-icon icon-pdf"><span class="icon-emoji">📄</span> PDF</div>`;
+                        visualHtml = `<div class="card-thumb-icon icon-pdf"><span class="icon-emoji">PDF</span></div>`;
                     } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
-                        visualHtml = `<div class="card-thumb-icon icon-audio"><span class="icon-emoji">🎵</span> AUDIO</div>`;
+                        visualHtml = `<div class="card-thumb-icon icon-audio"><span class="icon-emoji">AUDIO</span></div>`;
                     } else {
-                        visualHtml = `<div class="card-thumb-icon icon-generic"><span class="icon-emoji">📁</span> ${ext.toUpperCase()}</div>`;
+                        visualHtml = `<div class="card-thumb-icon icon-generic"><span class="icon-emoji">${ext.toUpperCase()}</span></div>`;
                     }
 
                     return `
@@ -188,7 +205,7 @@
                 }).join('');
             } catch (err) {
                 grid.innerHTML = `<div class="loading" style="color:#dc3545;">Erro: ${err.message}</div>`;
-                if (err.message === 'Não autorizado') AuthManager.logout();
+                if (err.message === 'Nao autorizado') AuthManager.logout();
             }
         }
 
@@ -208,7 +225,7 @@
             document.getElementById('renameInput').value = currentImage.file_name.split('.')[0];
             document.getElementById('modalInfoGrid').innerHTML = `
                 <div class="info-item"><label>Nome Original</label><div class="value">${currentImage.original_name}</div></div>
-                <div class="info-item"><label>Projeto</label><div class="value">${currentImage.project_name}</div></div>
+                <div class="info-item"><label>Projeto / Categoria</label><div class="value">${currentImage.project_name}</div></div>
                 <div class="info-item"><label>Tamanho</label><div class="value">${formatBytes(currentImage.file_size)}</div></div>
                 <div class="info-item"><label>Data Upload</label><div class="value">${new Date(currentImage.upload_date).toLocaleString('pt-BR')}</div></div>
                 <div class="info-item" style="grid-column: 1 / -1;"><label>Cloudflare CDN</label><div class="value">${currentImage.raw_url}</div></div>
