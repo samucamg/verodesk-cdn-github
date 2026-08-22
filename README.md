@@ -1,12 +1,13 @@
 # VeroDesk Serverless CDN Orchestrator
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/samucamg/verodesk-cdn-github)
+
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white)
 ![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1-F38020?style=flat-square&logo=cloudflare&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)
 ![GitHub](https://img.shields.io/badge/GitHub-API-181717?style=flat-square&logo=github&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/samucamg/verodesk-cdn-github)
 > 🚀 Um gerenciador de arquivos serverless, executado na borda e pronto para CDN. O VeroDesk Serverless CDN Orchestrator usa um único Cloudflare Worker para entregar o painel web, expor a API administrativa, registrar metadados no Cloudflare D1 e publicar arquivos em um repositório GitHub configurado pelo proprietário da instância.
 
 ## Índice
@@ -33,6 +34,16 @@ O **VeroDesk Serverless CDN Orchestrator** transforma um repositório GitHub em 
 O usuário faz upload pelo painel. O Worker valida o arquivo e a autenticação, grava o conteúdo no repositório GitHub usando a API oficial, registra os metadados no D1 e devolve URLs para consumo pelo GitHub, GitHub Raw, jsDelivr e, opcionalmente, um domínio próprio de CDN.
 
 > 💡 A interface estática e a API são servidas pelo **mesmo Worker**. Não existe Cloudflare Pages, `WORKER_API_URL`, segundo deploy ou etapa de copiar URL entre projetos.
+
+## Interface do sistema
+
+O VeroDesk reúne o gerenciamento de arquivos e a distribuição por CDN em um painel único. A dashboard oferece visão rápida do volume armazenado, total de arquivos, categorias e uma galeria para consultar os assets publicados.
+
+![Dashboard do VeroDesk CDN Manager](https://cdn.jsdelivr.net/gh/samucamg/imagens/Outros/2026/08/cdn_manager_1787439929.jpg)
+
+Ao abrir um arquivo na galeria, o sistema disponibiliza os links de entrega prontos para uso, incluindo GitHub, GitHub Raw, jsDelivr e, quando configurado, domínio personalizado.
+
+![Seleção de links de entrega do CDN](https://cdn.jsdelivr.net/gh/samucamg/imagens/Outros/2026/08/imagens_cdn_1787439907.jpg)
 
 ## Principais recursos
 
