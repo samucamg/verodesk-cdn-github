@@ -3,13 +3,16 @@ main = "src/index.ts"
 compatibility_date = "2024-08-21"
 compatibility_flags = [ "nodejs_compat" ]
 
+[assets]
+directory = "./public"
+
 [vars]
-GITHUB_USER = "SEU_USUARIO_AQUI"
-GITHUB_REPO = "SEU_REPOSITORIO_AQUI"
+GITHUB_USER = ""
+GITHUB_REPO = ""
 GITHUB_BRANCH = "main"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "NOME_DO_SEU_BANCO"
-database_id = "COLE_O_ID_DO_SEU_BANCO_AQUI"
+database_name = "cdn_manager_db"
+database_id = "PREENCHIDO_PELO_DEPLOY_BUTTON"
 preview_database_id = "DB"

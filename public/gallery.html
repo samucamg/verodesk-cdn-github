@@ -27,7 +27,6 @@
         .image-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); transition: transform 0.3s; cursor: pointer; }
         .image-card:hover { transform: translateY(-5px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
         
-        /* Thumbnails Dinamicas */
         .card-thumb-img { width: 100%; height: 200px; object-fit: cover; border-bottom: 1px solid #eee; }
         .card-thumb-icon { width: 100%; height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem; border-bottom: 1px solid #eee; }
         .icon-pdf { background: #fce4e4; color: #d93025; }
@@ -125,7 +124,6 @@
 
     <script src="auth.js"></script>
     <script>
-        const WORKER_API_URL = '__WORKER_API_URL__';
         let currentImage = null;
         
         function formatBytes(bytes) {
@@ -136,7 +134,8 @@
 
         async function loadStats() {
             try {
-                const res = await fetch(`${WORKER_API_URL}/api/stats`);
+                const token = await AuthManager.requireAuth();
+                const res = await fetch('/api/stats', { headers: { 'Authorization': `Bearer ${token}` } });
                 if (!res.ok) return;
                 const data = await res.json();
                 if (data.success && data.stats) {
@@ -155,7 +154,7 @@
             grid.innerHTML = '<div class="loading">Carregando imagens...</div>';
             
             try {
-                const res = await fetch(`${WORKER_API_URL}/api/uploads?project=${project}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const res = await fetch(`/api/uploads?project=${project}`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (!res.ok) throw new Error(res.status === 401 ? 'Não autorizado' : 'Erro na API');
                 
                 const data = await res.json();
@@ -169,7 +168,7 @@
                     
                     let visualHtml = '';
                     if (isImage) {
-                        visualHtml = `<img src="${img.raw_url.replace('raw.githubusercontent.com/samucamg/imagens/master/', 'cdn.inglescurso.com.br/')}" class="card-thumb-img" loading="lazy">`;
+                        visualHtml = `<img src="${img.cdn_url}" class="card-thumb-img" loading="lazy">`;
                     } else if (ext === 'pdf') {
                         visualHtml = `<div class="card-thumb-icon icon-pdf"><span class="icon-emoji">📄</span> PDF</div>`;
                     } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
@@ -195,7 +194,7 @@
 
         function openModal(index) {
             currentImage = window.galleryData[index];
-            const cfUrl = currentImage.raw_url.replace('raw.githubusercontent.com/samucamg/imagens/master/', 'cdn.inglescurso.com.br/');
+            const cfUrl = currentImage.cdn_url;
             const ext = currentImage.file_extension ? currentImage.file_extension.toLowerCase() : currentImage.file_name.split('.').pop().toLowerCase();
             const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
             
@@ -212,7 +211,7 @@
                 <div class="info-item"><label>Projeto</label><div class="value">${currentImage.project_name}</div></div>
                 <div class="info-item"><label>Tamanho</label><div class="value">${formatBytes(currentImage.file_size)}</div></div>
                 <div class="info-item"><label>Data Upload</label><div class="value">${new Date(currentImage.upload_date).toLocaleString('pt-BR')}</div></div>
-                <div class="info-item" style="grid-column: 1 / -1;"><label>Cloudflare CDN</label><div class="value">${cfUrl}</div></div>
+                <div class="info-item" style="grid-column: 1 / -1;"><label>Cloudflare CDN</label><div class="value">${currentImage.raw_url}</div></div>
                 <div class="info-item" style="grid-column: 1 / -1;"><label>jsDelivr CDN</label><div class="value">${currentImage.cdn_url}</div></div>
             `;
             document.getElementById('imageModal').style.display = 'flex';
@@ -222,7 +221,7 @@
 
         async function copyUrl(type) {
             if (!currentImage) return;
-            const url = type === 'cf' ? currentImage.raw_url.replace('raw.githubusercontent.com/samucamg/imagens/master/', 'cdn.inglescurso.com.br/') : currentImage.cdn_url;
+            const url = type === 'cf' ? currentImage.raw_url : currentImage.cdn_url;
             try { await navigator.clipboard.writeText(url); alert('URL copiada!'); } catch (e) { alert('Erro ao copiar URL.'); }
         }
 
@@ -236,7 +235,7 @@
             
             btn.disabled = true; btn.textContent = 'Salvando...';
             try {
-                const res = await fetch(`${WORKER_API_URL}/api/uploads`, {
+                const res = await fetch('/api/uploads', {
                     method: 'PUT',
                     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: currentImage.id, new_name: newName })
@@ -253,7 +252,7 @@
             
             const token = await AuthManager.requireAuth();
             try {
-                const res = await fetch(`${WORKER_API_URL}/api/uploads`, {
+                const res = await fetch('/api/uploads', {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: currentImage.id })

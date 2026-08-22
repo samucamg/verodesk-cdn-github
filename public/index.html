@@ -98,11 +98,9 @@
         const files = Array.from(fileInput.files);
         const totalFiles = files.length;
         const project = document.getElementById('project').value;
-        const WORKER_API_URL = '__WORKER_API_URL__';
         
         resultDiv.className = 'alert alert-info show';
         
-        // Fila Sequencial para evitar HTTP 409 Conflict no GitHub
         for (let i = 0; i < totalFiles; i++) {
             const file = files[i];
             resultDiv.innerHTML = `Enviando arquivo ${i + 1} de ${totalFiles}: <strong>${file.name}</strong>...`;
@@ -110,9 +108,10 @@
             const formData = new FormData();
             formData.append('image', file);
             formData.append('project', project);
+            formData.append('token', token);
             
             try {
-                const response = await fetch(`${WORKER_API_URL}/api/upload`, {
+                const response = await fetch('/api/upload', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -130,7 +129,7 @@
                     const data = JSON.parse(text);
                     if (data.success) {
                         successCount++;
-                        resultsHtml += `<strong>[OK] ${file.name}</strong><code>${data.urls.cloudflare}</code>`;
+                        resultsHtml += `<strong>[OK] ${file.name}</strong><code>${data.urls.jsdelivr}</code>`;
                     } else {
                         errorCount++;
                         resultsHtml += `<strong>[ERRO] ${file.name}:</strong> ${data.error}<br>`;

@@ -7,6 +7,7 @@ export interface Env {
     GITHUB_BRANCH: string;
     GITHUB_TOKEN: string;
     UPLOAD_TOKEN: string;
+    CDN_BASE_URL?: string;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -31,8 +32,11 @@ export default {
             return authHeader === `Bearer ${env.UPLOAD_TOKEN}`;
         };
 
+        const branch = env.GITHUB_BRANCH || 'main';
+
         try {
             if (url.pathname === '/api/stats' && request.method === 'GET') {
+                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: corsHeaders });
                 const { results } = await env.DB.prepare("SELECT count(*) as total, sum(file_size) as total_size FROM uploads").all();
                 return new Response(JSON.stringify({ success: true, stats: results[0] }), {
                     headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -42,7 +46,7 @@ export default {
             if (url.pathname === '/api/upload' && request.method === 'POST') {
                 const formData = await request.formData();
                 const token = formData.get('token');
-                
+
                 const isTokenValid = token === env.UPLOAD_TOKEN;
                 if (!isTokenValid && !checkAuth(request)) {
                     return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: corsHeaders });
@@ -81,7 +85,7 @@ export default {
                     body: JSON.stringify({
                         message: `Upload via Worker: ${originalName}`,
                         content: base64Content,
-                        branch: env.GITHUB_BRANCH || 'master'
+                        branch: branch
                     })
                 });
 
@@ -93,13 +97,12 @@ export default {
                 const ghData = await ghResponse.json() as any;
 
                 const urls = {
-                    cloudflare: `https://cdn.inglescurso.com.br/${githubPath}`,
-                    jsdelivr: `https://cdn.jsdelivr.net/gh/${env.GITHUB_USER}/${env.GITHUB_REPO}/${githubPath}`,
-                    raw: `https://raw.githubusercontent.com/${env.GITHUB_USER}/${env.GITHUB_REPO}/${env.GITHUB_BRANCH}/${githubPath}`,
+                    cloudflare: env.CDN_BASE_URL ? `${env.CDN_BASE_URL.replace(/\/$/, '')}/${githubPath}` : '',
+                    jsdelivr: `https://cdn.jsdelivr.net/gh/${env.GITHUB_USER}/${env.GITHUB_REPO}@${branch}/${githubPath}`,
+                    raw: `https://raw.githubusercontent.com/${env.GITHUB_USER}/${env.GITHUB_REPO}/${branch}/${githubPath}`,
                     github: ghData.content?.html_url || ''
                 };
 
-                // FIX: Salvando o SHA do Blob (content) e nao o SHA do commit
                 const correctSha = ghData.content?.sha || ghData.commit?.sha || 'N/A';
 
                 await env.DB.prepare(
@@ -139,14 +142,12 @@ export default {
                 pathParts.pop();
                 const newPath = `${pathParts.join('/')}/${newFileName}`;
 
-                // 1. Pegar meta do arquivo antigo
                 const getUrl = `https://api.github.com/repos/${env.GITHUB_USER}/${env.GITHUB_REPO}/contents/${fileRecord.file_path}`;
                 const getRes = await fetch(getUrl, { headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'Cloudflare-Worker-CDN' } });
                 if (!getRes.ok) return new Response(JSON.stringify({ success: false, error: 'Falha GitHub GET' }), { status: 502, headers: corsHeaders });
-                
+
                 const fileData = await getRes.json() as any;
 
-                // FIX: Bypass de 1MB. Se o GitHub omitiu o 'content', nos baixamos pela Cloudflare e convertemos.
                 let fileBase64 = fileData.content;
                 if (!fileBase64 || fileBase64.trim() === '') {
                     const rawFileRes = await fetch(fileRecord.raw_url);
@@ -155,24 +156,21 @@ export default {
                     fileBase64 = Buffer.from(arrayBuffer).toString('base64');
                 }
 
-                // 2. Criar novo
                 const putUrl = `https://api.github.com/repos/${env.GITHUB_USER}/${env.GITHUB_REPO}/contents/${newPath}`;
                 const putRes = await fetch(putUrl, {
                     method: 'PUT',
                     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'Cloudflare-Worker-CDN', 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: `Rename: -> ${newFileName}`, content: fileBase64, branch: env.GITHUB_BRANCH || 'master' })
+                    body: JSON.stringify({ message: `Rename: -> ${newFileName}`, content: fileBase64, branch: branch })
                 });
                 if (!putRes.ok) return new Response(JSON.stringify({ success: false, error: 'Falha GitHub PUT' }), { status: 502, headers: corsHeaders });
                 const newFileData = await putRes.json() as any;
 
-                // 3. Deletar antigo (usando Blob SHA exato)
                 await fetch(getUrl, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'Cloudflare-Worker-CDN', 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: `Delete old: ${fileRecord.original_name}`, sha: fileData.sha, branch: env.GITHUB_BRANCH || 'master' })
+                    body: JSON.stringify({ message: `Delete old: ${fileRecord.original_name}`, sha: fileData.sha, branch: branch })
                 });
 
-                // 4. DB
                 const newCdnUrl = fileRecord.cdn_url.replace(fileRecord.file_name, newFileName);
                 const newRawUrl = fileRecord.raw_url.replace(fileRecord.file_name, newFileName);
                 await env.DB.prepare(`UPDATE uploads SET original_name = ?, file_name = ?, file_path = ?, cdn_url = ?, raw_url = ?, commit_sha = ? WHERE id = ?`)
@@ -190,8 +188,7 @@ export default {
                 if (!fileRecord) return new Response(JSON.stringify({ success: false, error: 'Nao encontrado' }), { status: 404, headers: corsHeaders });
 
                 const ghUrl = `https://api.github.com/repos/${env.GITHUB_USER}/${env.GITHUB_REPO}/contents/${fileRecord.file_path}`;
-                
-                // FIX: Recuperar Blob SHA em tempo real para evitar conflitos de commit_sha legado
+
                 const getRes = await fetch(ghUrl, { headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'Cloudflare-Worker-CDN' } });
                 let blobSha = fileRecord.commit_sha;
                 if (getRes.ok) {
@@ -202,7 +199,7 @@ export default {
                 const delRes = await fetch(ghUrl, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'Cloudflare-Worker-CDN', 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: `Delete: ${fileRecord.original_name}`, sha: blobSha, branch: env.GITHUB_BRANCH || 'master' })
+                    body: JSON.stringify({ message: `Delete: ${fileRecord.original_name}`, sha: blobSha, branch: branch })
                 });
 
                 if (delRes.ok || delRes.status === 404) {
