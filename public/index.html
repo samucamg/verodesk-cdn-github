@@ -157,7 +157,7 @@
                     const data = JSON.parse(text);
                     if (data.success) {
                         successCount++;
-                        resultsHtml += `<strong>[OK] ${file.name}</strong><code>${data.urls.jsdelivr}</code>`;
+                        resultsHtml += `<strong>[OK] ${file.name}</strong><code>${window.location.origin}${data.urls.cloudflare}</code>`;
                     } else {
                         errorCount++;
                         resultsHtml += `<strong>[ERRO] ${file.name}:</strong> ${data.error}<br>`;

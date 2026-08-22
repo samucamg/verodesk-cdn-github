@@ -108,7 +108,7 @@
                 </div>
                 <div class="modal-info" id="modalInfoGrid"></div>
                 <div class="modal-actions">
-                    <button class="btn btn-copy-cf" onclick="copyUrl('cf')">Copiar Cloudflare</button>
+                    <button class="btn btn-copy-cf" onclick="copyUrl('cf')">Copiar do Meu Dominio</button>
                     <button class="btn btn-copy-js" onclick="copyUrl('js')">Copiar jsDelivr</button>
                     <button class="btn btn-delete" onclick="deleteImage()">Deletar Arquivo</button>
                 </div>
@@ -185,7 +185,7 @@
                     
                     let visualHtml = '';
                     if (isImage) {
-                        visualHtml = `<img src="${img.cdn_url}" class="card-thumb-img" loading="lazy">`;
+                        visualHtml = `<img src="${window.location.origin}/${img.file_path}" class="card-thumb-img" loading="lazy">`;
                     } else if (ext === 'pdf') {
                         visualHtml = `<div class="card-thumb-icon icon-pdf"><span class="icon-emoji">PDF</span></div>`;
                     } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
@@ -211,13 +211,13 @@
 
         function openModal(index) {
             currentImage = window.galleryData[index];
-            const cfUrl = currentImage.cdn_url;
+            const customDomainUrl = `${window.location.origin}/${currentImage.file_path}`;
             const ext = currentImage.file_extension ? currentImage.file_extension.toLowerCase() : currentImage.file_name.split('.').pop().toLowerCase();
             const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
             
             const imgContainer = document.getElementById('modalImgContainer');
             if (isImage) {
-                imgContainer.innerHTML = `<img id="modalImg" class="modal-image" src="${cfUrl}">`;
+                imgContainer.innerHTML = `<img id="modalImg" class="modal-image" src="${customDomainUrl}">`;
             } else {
                 imgContainer.innerHTML = `<div class="no-preview">Sem visualizacao pre-via para formato .${ext.toUpperCase()}</div>`;
             }
@@ -228,7 +228,7 @@
                 <div class="info-item"><label>Projeto / Categoria</label><div class="value">${currentImage.project_name}</div></div>
                 <div class="info-item"><label>Tamanho</label><div class="value">${formatBytes(currentImage.file_size)}</div></div>
                 <div class="info-item"><label>Data Upload</label><div class="value">${new Date(currentImage.upload_date).toLocaleString('pt-BR')}</div></div>
-                <div class="info-item" style="grid-column: 1 / -1;"><label>Cloudflare CDN</label><div class="value">${currentImage.raw_url}</div></div>
+                <div class="info-item" style="grid-column: 1 / -1;"><label>Seu Dominio (Edge CDN)</label><div class="value">${customDomainUrl}</div></div>
                 <div class="info-item" style="grid-column: 1 / -1;"><label>jsDelivr CDN</label><div class="value">${currentImage.cdn_url}</div></div>
             `;
             document.getElementById('imageModal').style.display = 'flex';
@@ -238,7 +238,7 @@
 
         async function copyUrl(type) {
             if (!currentImage) return;
-            const url = type === 'cf' ? currentImage.raw_url : currentImage.cdn_url;
+            const url = type === 'cf' ? `${window.location.origin}/${currentImage.file_path}` : currentImage.cdn_url;
             try { await navigator.clipboard.writeText(url); alert('URL copiada!'); } catch (e) { alert('Erro ao copiar URL.'); }
         }
 
