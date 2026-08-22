@@ -1,45 +1,51 @@
-# Serverless CDN Orchestrator
+# VeroDesk Serverless CDN Orchestrator
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/samucamg/verodesk-cdn-github)
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white)
-![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-F38020?style=flat-square&logo=cloudflare&logoColor=white)
 ![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1-F38020?style=flat-square&logo=cloudflare&logoColor=white)
-![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=flat-square&logo=github&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)
+![GitHub](https://img.shields.io/badge/GitHub-API-181717?style=flat-square&logo=github&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-> 🚀 Um orquestrador de CDN serverless e edge-native. Ele transforma um repositório GitHub em uma origem de arquivos, usa Cloudflare Workers para a API e o gerenciamento, Cloudflare D1 para metadados e Cloudflare Pages para a interface web. Os arquivos podem ser consumidos globalmente pela CDN do jsDelivr e pela infraestrutura da Cloudflare.
+> 🚀 Um gerenciador de arquivos serverless, executado na borda e pronto para CDN. O VeroDesk Serverless CDN Orchestrator usa um único Cloudflare Worker para entregar o painel web, expor a API administrativa, registrar metadados no Cloudflare D1 e publicar arquivos em um repositório GitHub configurado pelo proprietário da instância.
 
 ## Índice
 
 - [Visão geral](#visão-geral)
+- [Principais recursos](#principais-recursos)
 - [Arquitetura](#arquitetura)
-- [Pré-requisitos](#pré-requisitos)
-- [Instalação pelo navegador](#instalação-pelo-navegador-recomendada)
-- [Passo 1: preparar o GitHub](#passo-1-preparar-o-github)
-- [Passo 2: criar e preparar o D1](#passo-2-criar-e-preparar-o-d1)
-- [Passo 3: implantar o Worker](#passo-3-implantar-o-worker-backend)
-- [Passo 4: implantar o Pages](#passo-4-implantar-o-pages-frontend)
+- [Deploy em um clique](#deploy-em-um-clique)
+- [Campos do assistente](#campos-do-assistente)
 - [Primeiro acesso](#primeiro-acesso)
-- [Configuração e segurança](#configuração-e-segurança)
-- [URLs de CDN](#urls-de-cdn)
+- [Autenticação e segurança](#autenticação-e-segurança)
+- [API](#api)
+- [URLs de entrega](#urls-de-entrega)
 - [Domínio personalizado](#domínio-personalizado)
-- [Diagnóstico](#diagnóstico)
 - [Desenvolvimento local](#desenvolvimento-local-opcional)
+- [Diagnóstico](#diagnóstico)
 
 ---
 
 ## Visão geral
 
-O **Serverless CDN Orchestrator** permite administrar arquivos estáticos em um repositório GitHub por uma interface web protegida. O backend executa em Cloudflare Workers, registra metadados no Cloudflare D1 e usa a API GitHub para criar, atualizar ou remover arquivos na origem configurada. O frontend é entregue pelo Cloudflare Pages.
+O **VeroDesk Serverless CDN Orchestrator** transforma um repositório GitHub em uma origem administrável para imagens, documentos e áudio. O projeto foi criado para quem quer publicar e organizar assets por uma interface web, sem expor o token do GitHub no navegador.
 
-O desenho separa três responsabilidades:
+O usuário faz upload pelo painel. O Worker valida o arquivo e a autenticação, grava o conteúdo no repositório GitHub usando a API oficial, registra os metadados no D1 e devolve URLs para consumo pelo GitHub, GitHub Raw, jsDelivr e, opcionalmente, um domínio próprio de CDN.
 
-- 🗂️ **GitHub:** origem persistente para imagens e demais assets publicados.
-- ⚙️ **Cloudflare Worker:** API segura que valida o token de upload, comunica-se com GitHub e acessa o banco D1.
-- 🖥️ **Cloudflare Pages:** painel visual que consome a API do Worker.
-- 🗄️ **Cloudflare D1:** banco SQL serverless que guarda os dados e metadados necessários ao sistema.
-- 🌍 **jsDelivr e Cloudflare:** entrega global dos arquivos por CDN, de acordo com a URL consumida e a visibilidade do repositório.
+> 💡 A interface estática e a API são servidas pelo **mesmo Worker**. Não existe Cloudflare Pages, `WORKER_API_URL`, segundo deploy ou etapa de copiar URL entre projetos.
 
-> 💡 O fluxo recomendado é totalmente pelo navegador. Você não precisa instalar Node.js, Wrangler, Git ou usar `git clone` para colocar uma instância no ar.
+## Principais recursos
+
+- 🚀 **Deploy nativo em um clique:** instala Worker, assets estáticos, D1, variáveis e secrets pelo assistente Deploy to Cloudflare.
+- 🖥️ **Painel integrado:** `index.html`, galeria e autenticação são publicados como static assets pelo próprio Worker.
+- 🗄️ **D1 com migration versionada:** o banco de metadados é criado e inicializado com `migrations/0001_initial.sql`.
+- 📦 **Publicação no GitHub:** upload, listagem, renomeação e exclusão operam no repositório de assets definido pelo proprietário.
+- 🌍 **URLs de entrega:** retorno de URLs GitHub, GitHub Raw, jsDelivr e domínio CDN próprio opcional.
+- 🔐 **Token GitHub protegido:** `GITHUB_TOKEN` existe somente como secret do Worker; o navegador nunca recebe essa credencial.
+- 🔑 **Acesso administrativo:** `UPLOAD_TOKEN` protege painel e endpoints administrativos.
+- 🛡️ **Validações de segurança:** validação de extensão, tamanho máximo de 10 MB, nomes de arquivos, identificadores de projeto e operações de renomeação/exclusão.
+- 📊 **Metadados e estatísticas:** D1 registra caminho, tamanho, extensão, URLs, SHA e data de upload.
+- 🔄 **Renomeação consistente:** o Worker cria o novo arquivo, verifica a exclusão do anterior e sincroniza o registro D1.
 
 ## Arquitetura
 
@@ -47,445 +53,405 @@ O desenho separa três responsabilidades:
 Administrador no navegador
           |
           v
-Cloudflare Pages (painel web)
-          |
-          | WORKER_API_URL + UPLOAD_TOKEN
-          v
-Cloudflare Worker (API e autenticação)
-          |                         |
-          | GitHub API              | binding DB
-          v                         v
-Repositório de assets          Cloudflare D1
-          |
-          v
-GitHub raw / jsDelivr CDN / URLs públicas
+Cloudflare Worker
+  |                    |
+  | Static assets      | API protegida
+  | public/index.html  | /api/upload
+  | public/gallery.html| /api/uploads
+  | public/auth.js     | /api/stats
+  |                    |
+  v                    v
+Painel web          Cloudflare D1
+                         |
+                         v
+                   GitHub Contents API
+                         |
+                         v
+              Repositório de assets GitHub
+                         |
+                         v
+      GitHub URL | GitHub Raw | jsDelivr | CDN própria
 ```
 
-## Pré-requisitos
+## Deploy em um clique
 
-Antes de começar, tenha:
+### Pré-requisitos
+
+Antes de clicar no botão, tenha:
 
 1. Uma conta no [GitHub](https://github.com/signup).
 2. Uma conta na [Cloudflare](https://dash.cloudflare.com/sign-up).
-3. Um repositório GitHub que será usado exclusivamente ou principalmente para armazenar seus arquivos de CDN.
-4. Um **Personal Access Token** do GitHub autorizado para ler e escrever no repositório de assets.
-5. Cerca de 10 a 20 minutos para concluir as duas implantações: Worker e Pages.
+3. Um repositório GitHub destinado aos seus assets, público caso queira distribuir diretamente por jsDelivr.
+4. Um Personal Access Token do GitHub autorizado a ler e gravar nesse repositório de assets.
 
-> 📌 Uma conta GitHub é obrigatória porque o backend utiliza a API GitHub e porque o deploy conectado ao Git cria implantações a partir de um repositório. O repositório de assets pode ser público ou privado, mas a estratégia de URL e acesso muda conforme essa escolha.
+> 📌 Você não precisa usar terminal, instalar Node.js, instalar Wrangler ou executar `git clone` para instalar uma instância pelo fluxo abaixo.
 
----
+### Iniciar a instalação
 
-## Instalação pelo navegador (recomendada)
+Clique no botão e conecte sua conta GitHub à Cloudflare quando o assistente solicitar:
 
-A implantação completa possui quatro etapas, todas realizadas na interface Cloudflare e GitHub:
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/samucamg/verodesk-cdn-github)
 
-1. Fazer um fork deste projeto para sua conta GitHub.
-2. Criar o repositório que receberá as imagens e outros arquivos.
-3. Criar e inicializar o banco Cloudflare D1.
-4. Conectar o fork duas vezes no Cloudflare: uma vez como **Worker** para o backend e outra vez como **Pages** para o frontend.
+O assistente criará uma cópia do projeto na sua conta GitHub e abrirá o formulário de configuração Cloudflare. Escolha nomes exclusivos para o Worker e para o banco D1, preencha as variáveis e secrets e finalize a implantação.
 
-> ⚠️ **Não confunda o fork do sistema com o repositório de assets.** O fork contém o código do Worker e do painel. O repositório de assets é o destino onde suas imagens, arquivos e conteúdo de CDN serão armazenados.
+### O que o deploy automatiza
 
-### Implantação em um clique
+- Criação de uma cópia do código na conta GitHub do usuário.
+- Criação e implantação do Cloudflare Worker.
+- Upload do conteúdo da pasta `public/` como assets estáticos.
+- Criação ou associação do banco D1 definido pelo binding `DB`.
+- Execução da migration versionada para criar a tabela `uploads` e seus índices.
+- Publicação do painel e da API na mesma URL `workers.dev`.
 
-Se este repositório possuir um botão **Deploy to Cloudflare** configurado, ele pode acelerar a criação do Worker e de bindings descritos no arquivo de configuração. Ainda assim, este projeto possui uma arquitetura com **duas aplicações**:
+### O que você ainda informa
 
-- um **Worker** para backend, API GitHub e binding D1;
-- um projeto **Pages** para a interface visual.
+Por segurança, dois recursos pertencem à sua conta e precisam ser fornecidos no formulário:
 
-Portanto, depois de qualquer implantação automatizada do Worker, você ainda deve confirmar os secrets, vincular o banco D1 correto, executar o `schema.sql` e publicar o Pages com `WORKER_API_URL` configurada. O botão não deve ser interpretado como substituto dessas validações.
+- O repositório GitHub que receberá os arquivos.
+- Um token GitHub limitado a esse repositório.
 
-Para criar um botão no seu fork, substitua `SEU_USUARIO` e o nome do repositório nesta URL:
+O deploy não cria um Personal Access Token por você e não deve receber uma chave GitHub com acesso amplo a todos os seus repositórios.
 
-```md
-[![Implantar no Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/SEU_USUARIO/cdn-manager-worker)
-```
+## Campos do assistente
 
----
+### Nomes de recursos Cloudflare
 
-## Passo 1: preparar o GitHub
+| Campo | Exemplo | Regra |
+|---|---|---|
+| Nome do Worker | `meu-cdn-manager` | Deve ser único na sua conta; compõe a URL padrão `https://meu-cdn-manager.SEUSUBDOMINIO.workers.dev` |
+| Nome do banco D1 | `meu-cdn-manager-db` | Deve ser único e identifica o banco com os metadados dos uploads |
+| Binding D1 | `DB` | Não altere. O código usa esse nome para acessar o banco |
 
-### 1.1 Fazer fork do projeto
+### Variáveis e secrets
 
-1. Abra o repositório deste projeto no GitHub.
-2. Clique em **Fork**.
-3. Selecione sua conta GitHub como destino.
-4. Mantenha o fork como público ou privado de acordo com sua política de acesso.
-5. Aguarde a criação do repositório na sua conta.
+| Nome | Tipo | Exemplo | Finalidade |
+|---|---|---|---|
+| `GITHUB_USER` | Variável | `meuusuario` | Usuário ou organização proprietária do repositório de assets |
+| `GITHUB_REPO` | Variável | `minha-cdn-assets` | Repositório que receberá os arquivos enviados pelo painel |
+| `GITHUB_BRANCH` | Variável | `main` | Branch de destino; mantenha `main` salvo se seu repositório usar outra branch |
+| `GITHUB_TOKEN` | Secret | `github_pat_...` | Token GitHub que permite ao Worker ler e alterar o repositório de assets |
+| `UPLOAD_TOKEN` | Secret | Token aleatório longo | Senha de acesso ao painel e às rotas administrativas |
+| `CDN_BASE_URL` | Variável opcional | `https://cdn.seudominio.com` | Base de uma CDN ou domínio próprio; informe sem barra final |
 
-O fork será conectado ao Cloudflare para criar o Worker e o Pages. Não é necessário cloná-lo localmente para este guia.
+### Criar o token GitHub
 
-### 1.2 Criar o repositório de assets
-
-Crie um segundo repositório para seus arquivos:
-
-1. No GitHub, clique em **New repository**.
-2. Defina um nome explícito, por exemplo `minha-cdn-assets`.
-3. Escolha a visibilidade desejada.
-4. Clique em **Create repository**.
-
-O nome criado será usado posteriormente como `GITHUB_REPO`. Se o repositório for `minha-cdn-assets` e seu usuário for `meuusuario`, os valores serão:
-
-```text
-GITHUB_USER=meuusuario
-GITHUB_REPO=minha-cdn-assets
-```
-
-> 🌐 Para consumir arquivos diretamente pela CDN pública do jsDelivr, o repositório normalmente precisa estar publicamente acessível. Avalie a visibilidade e nunca publique conteúdo confidencial, dados pessoais, backups ou chaves de API nesse repositório.
-
-### 1.3 Criar o token de acesso do GitHub
-
-O Worker precisa de um token que possa criar e atualizar arquivos no repositório de assets.
-
-**Opção recomendada: fine-grained Personal Access Token**
+Prefira um **fine-grained Personal Access Token**:
 
 1. No GitHub, abra **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens**.
 2. Clique em **Generate new token**.
-3. Defina um nome identificável, como `cdn-manager-worker`.
-4. Escolha uma data de expiração adequada.
-5. Em **Repository access**, selecione somente o repositório de assets criado na etapa anterior.
-6. Em **Repository permissions**, conceda **Contents: Read and write**.
-7. Gere o token e copie-o imediatamente para um gerenciador de senhas.
+3. Em acesso a repositórios, selecione apenas seu repositório de assets.
+4. Em permissões do repositório, conceda **Contents: Read and write**.
+5. Defina uma expiração adequada e gere o token.
+6. Cole o token somente no campo secreto `GITHUB_TOKEN` do Cloudflare.
 
-**Alternativa compatível: classic Personal Access Token**
+### Criar o UPLOAD_TOKEN
 
-Se o projeto exigir token clássico, gere um token em **Tokens (classic)** com o escopo `repo`. Esse escopo é mais amplo; prefira o token fine-grained limitado a um único repositório quando o fluxo do projeto for compatível.
+Use um token aleatório com pelo menos 24 caracteres, contendo letras maiúsculas, minúsculas, números e símbolos. Não use nome, domínio, data ou texto previsível.
 
-> 🔒 O GitHub mostra o token completo apenas uma vez. Guarde-o em local seguro. Ele será cadastrado no Cloudflare como `GITHUB_TOKEN`; não o coloque em commits, arquivos `.env` enviados ao GitHub, capturas de tela ou código do frontend.
-
----
-
-## Passo 2: criar e preparar o D1
-
-O D1 é o banco SQL serverless do projeto. O Worker precisa de um binding chamado exatamente `DB` para acessá-lo.
-
-### 2.1 Criar o banco
-
-1. Acesse o [Cloudflare Dashboard](https://dash.cloudflare.com/).
-2. Abra **Workers & Pages**.
-3. Procure a área de armazenamento, bancos de dados ou **D1 SQL Database**.
-4. Clique em **Create database**.
-5. Informe um nome descritivo, por exemplo:
+Exemplo de formato válido — **não reutilize este valor**:
 
 ```text
-cdn-manager-db
+R7!mK2qVx9#Ld4Wa8Tp6Ns3Z
 ```
-
-6. Clique em **Create**.
-7. Abra o banco recém-criado e registre o nome e o ID do banco para referência administrativa.
-
-### 2.2 Executar o schema.sql pelo Dashboard
-
-1. No repositório do fork, localize o arquivo `schema.sql`.
-2. Abra o arquivo e copie todo o seu conteúdo.
-3. No Cloudflare Dashboard, abra o banco D1 criado.
-4. Acesse a aba **Console**.
-5. Cole integralmente o conteúdo de `schema.sql`.
-6. Clique em **Execute**.
-7. Confirme que o console não exibiu erro SQL.
-
-> ✅ Execute o schema antes de usar o painel. Sem as tabelas e índices do `schema.sql`, o Worker pode responder com erros de banco ou falhar ao listar e registrar assets.
-
-### 2.3 Verificação rápida
-
-No console do D1, execute uma consulta simples compatível com o schema do projeto, por exemplo uma consulta de listagem em uma tabela criada pelo arquivo. A tabela exata depende do `schema.sql`; não invente nomes de tabelas se o arquivo usar outra estrutura.
-
----
-
-## Passo 3: implantar o Worker (backend)
-
-O Worker é a API do sistema. Ele guarda os secrets, valida o `UPLOAD_TOKEN`, conversa com a API GitHub e usa o binding D1.
-
-### 3.1 Conectar o fork ao Cloudflare
-
-1. No Cloudflare Dashboard, abra **Workers & Pages**.
-2. Clique em **Create application**.
-3. Escolha o fluxo de criação/importação de **Worker** a partir de um repositório Git.
-4. Conecte sua conta GitHub caso seja solicitado.
-5. Selecione o **fork deste projeto**, e não o repositório de assets.
-6. Escolha a branch de produção, normalmente `main`.
-7. Avance para a tela de configuração.
-
-O Cloudflare lê a configuração do repositório. Revise os valores detectados antes de implantar.
-
-### 3.2 Configurar variáveis e secrets
-
-Na área de **Settings** → **Variables and Secrets** do Worker, configure os valores abaixo. Marque tokens e senhas como **secret**.
-
-| Nome | Tipo recomendado | Exemplo | Finalidade |
-|---|---|---|---|
-| `GITHUB_USER` | Variável | `meuusuario` | Seu nome de usuário ou organização no GitHub |
-| `GITHUB_REPO` | Variável | `minha-cdn-assets` | Repositório que armazenará os arquivos |
-| `GITHUB_TOKEN` | Secret | Token GitHub | Permite ao Worker criar, alterar e ler conteúdo via API GitHub |
-| `UPLOAD_TOKEN` | Secret | Token aleatório longo | Senha de acesso ao painel e às operações protegidas |
-
-Crie um `UPLOAD_TOKEN` longo, aleatório e exclusivo. Recomenda-se no mínimo 24 caracteres, com letras maiúsculas, minúsculas, números e símbolos. Exemplo de formato — **não reutilize este valor**:
-
-```text
-T9!cdnQm7Vx#4Ra2Lp8Zk6HwD
-```
-
-No Linux, macOS ou WSL, você pode gerar um token localmente:
-
-```bash
-openssl rand -base64 32 | tr -d '\n'
-```
-
-### 3.3 Vincular o D1 ao Worker
-
-Ainda nas configurações do Worker:
-
-1. Abra **Bindings**.
-2. Clique em **Add binding**.
-3. Selecione **D1 database**.
-4. No nome da variável ou binding, digite exatamente:
-
-```text
-DB
-```
-
-5. Selecione o banco `cdn-manager-db` — ou o nome que você criou.
-6. Salve e faça o deploy da alteração.
-
-> ⚠️ O nome do binding deve ser `DB`. Alterá-lo para outro nome faz com que o código que espera `env.DB` não encontre o banco.
-
-### 3.4 Implantar e copiar a URL
-
-Clique em **Deploy** ou **Save and Deploy**. Ao terminar, o Cloudflare fornecerá uma URL semelhante a:
-
-```text
-https://cdn-manager-worker.SEUSUBDOMINIO.workers.dev
-```
-
-Copie a URL completa **sem adicionar uma barra `/` ao final**. Ela será usada no Pages como `WORKER_API_URL`.
-
-> 📌 Guarde essa URL. Não use a URL do Pages nesta etapa; o Pages ainda será criado no passo seguinte.
-
----
-
-## Passo 4: implantar o Pages (frontend)
-
-O Pages entrega a interface gráfica. Ele deve apontar para a URL do Worker criada no passo anterior.
-
-### 4.1 Criar o projeto Pages
-
-1. No Cloudflare Dashboard, abra **Workers & Pages**.
-2. Clique em **Create application**.
-3. Escolha a aba **Pages**.
-4. Selecione **Import an existing Git repository** ou **Connect to Git**.
-5. Escolha novamente o **fork deste projeto**.
-6. Selecione a branch de produção, normalmente `main`.
-
-### 4.2 Configurações de build
-
-Preencha os campos conforme a estrutura deste projeto:
-
-| Campo do Cloudflare Pages | Valor |
-|---|---|
-| Framework preset | `None` |
-| Build command | `bash build.sh` |
-| Build output directory | `public` |
-| Production branch | `main` ou a branch principal efetivamente usada no fork |
-
-O comando `bash build.sh` prepara os arquivos do frontend e o diretório `public` é o conteúdo estático que será publicado pelo Pages. Não altere esses valores sem revisar primeiro o arquivo `build.sh` e a estrutura do projeto.
-
-### 4.3 Configurar WORKER_API_URL
-
-Antes de implantar, abra a área de variáveis de ambiente avançadas e adicione:
-
-| Variável | Valor |
-|---|---|
-| `WORKER_API_URL` | URL do Worker copiada no Passo 3, sem `/` ao final |
-
-Exemplo correto:
-
-```text
-WORKER_API_URL=https://cdn-manager-worker.SEUSUBDOMINIO.workers.dev
-```
-
-Exemplo incorreto:
-
-```text
-WORKER_API_URL=https://cdn-manager-worker.SEUSUBDOMINIO.workers.dev/
-```
-
-> ⚠️ `WORKER_API_URL` deve apontar para o **Worker**, não para a URL `.pages.dev` do frontend. Se apontar para o Pages, o painel tentará chamar a si mesmo e as operações da API falharão.
-
-### 4.4 Publicar o painel
-
-1. Clique em **Save and Deploy**.
-2. Aguarde o log de build concluir sem erros.
-3. Copie a URL publicada, normalmente no formato:
-
-```text
-https://NOME-DO-PROJETO.pages.dev
-```
-
-4. Abra a URL no navegador.
-
----
 
 ## Primeiro acesso
 
-1. Acesse a URL `.pages.dev` criada pelo Cloudflare Pages.
-2. Informe o valor de `UPLOAD_TOKEN` quando o painel solicitar autenticação.
-3. Faça um upload de teste com um arquivo não confidencial.
-4. Verifique no GitHub se o arquivo foi criado no repositório de assets correto.
-5. Copie a URL pública ou URL de CDN gerada pelo painel e teste-a em uma aba anônima do navegador.
+Após a implantação, o Cloudflare fornecerá uma URL semelhante a:
 
-> ✅ Se o upload chegar ao repositório correto e a URL abrir o arquivo esperado, Worker, D1, GitHub e Pages estão integrados corretamente.
+```text
+https://meu-cdn-manager.SEUSUBDOMINIO.workers.dev
+```
 
----
+1. Abra essa URL no navegador.
+2. Informe o seu `UPLOAD_TOKEN` no painel.
+3. Selecione um projeto e envie um arquivo de teste não confidencial.
+4. Confirme que o arquivo foi criado no repositório GitHub configurado.
+5. Abra a URL jsDelivr ou GitHub Raw devolvida pelo sistema.
 
-## Configuração e segurança
+> ✅ Se o upload aparecer no repositório e a URL do arquivo abrir corretamente, Worker, D1, painel e API GitHub estão configurados.
 
-### Proteção de credenciais
+## Autenticação e segurança
 
-| Credencial | Onde deve ficar | Onde nunca deve ficar |
+### Proteção das credenciais
+
+| Credencial | Onde fica | Nunca coloque em |
 |---|---|---|
-| `GITHUB_TOKEN` | Secret do Cloudflare Worker e gerenciador de senhas | Frontend, Git, README, logs e screenshots |
-| `UPLOAD_TOKEN` | Secret do Cloudflare Worker e gerenciador de senhas | Frontend público, Git, README e URLs |
-| `WORKER_API_URL` | Variável de build do Cloudflare Pages | Pode ser pública; não é uma credencial |
+| `GITHUB_TOKEN` | Secret do Cloudflare e gerenciador de senhas | HTML, JavaScript do frontend, Git, README, logs e capturas de tela |
+| `UPLOAD_TOKEN` | Secret do Cloudflare e gerenciador de senhas | Repositório público, URLs, README e scripts de frontend |
+| `GITHUB_USER` e `GITHUB_REPO` | Variáveis do Worker | Não são secrets, mas devem apontar para o repositório correto |
 
-### Rotação de tokens
+O painel pode enviar `UPLOAD_TOKEN` pelo formulário de upload e as demais rotas administrativas aceitam o header:
 
-Se um token foi exposto:
-
-1. Revogue o token GitHub imediatamente e crie outro com acesso mínimo.
-2. Gere um novo `UPLOAD_TOKEN`.
-3. Atualize os secrets do Worker.
-4. Faça deploy da nova configuração.
-5. Atualize os usuários, integrações ou navegadores autorizados.
-6. Revise o repositório de assets e o histórico de atividade GitHub.
-
-### Repositório público ou privado
-
-- **Público:** mais simples para distribuição por CDN pública e leitura sem autenticação. Não use para arquivos privados.
-- **Privado:** protege a leitura no GitHub, mas pode impedir ou alterar o comportamento de serviços de CDN públicos. Planeje uma camada autenticada de entrega se os arquivos forem sigilosos.
-
-### Boas práticas de conteúdo
-
-- Não envie arquivos contendo segredos, dados pessoais, backups de banco ou conteúdo confidencial.
-- Use nomes de arquivos previsíveis e diretórios organizados, por exemplo `images/2026/08/banner.webp`.
-- Defina política de limpeza para versões antigas e arquivos sem uso.
-- Revise limites de armazenamento, tamanho de arquivo e termos de uso do GitHub e da CDN escolhida antes de usar o sistema como armazenamento de alto volume.
-
----
-
-## URLs de CDN
-
-Depois de enviar um arquivo, a forma de consumo depende da estratégia do projeto e da visibilidade do repositório.
-
-### URL raw do GitHub
-
-O GitHub permite acessar conteúdo bruto de um repositório. É útil para inspeção e desenvolvimento, mas não deve ser tratado automaticamente como uma CDN dedicada de alto volume.
-
-Estrutura ilustrativa:
-
-```text
-https://raw.githubusercontent.com/USUARIO/REPOSITORIO/BRANCH/caminho/do/arquivo.png
+```http
+Authorization: Bearer SEU_UPLOAD_TOKEN
 ```
 
-### URL jsDelivr
+O token GitHub nunca é retornado pela API e só é usado pelo Worker na comunicação servidor-a-servidor com a GitHub Contents API.
 
-Para repositórios públicos suportados pelo jsDelivr, uma URL típica usa a seguinte estrutura:
+### Validações aplicadas
+
+- Limite de upload: **10 MB**.
+- Extensões permitidas: `jpg`, `jpeg`, `png`, `gif`, `webp`, `svg`, `pdf` e `mp3`.
+- `project` aceita somente letras, números, `_` e `-`, com até 64 caracteres.
+- Nomes de arquivo são normalizados antes de compor o caminho GitHub.
+- Renomeações rejeitam nomes vazios ou compostos apenas por caracteres inválidos.
+- A exclusão anterior em uma renomeação é verificada antes de sincronizar o D1.
+- Estatísticas retornam `0` quando ainda não existem uploads, evitando valores nulos no frontend.
+
+### Visibilidade do repositório de assets
+
+- **Público:** adequado para uso direto com jsDelivr e compartilhamento de arquivos estáticos.
+- **Privado:** indicado para conteúdo restrito, mas URLs públicas de CDN podem não funcionar como esperado. Não use jsDelivr como estratégia de entrega de dados privados.
+
+> 🔒 Nunca faça upload de backups, credenciais, dados pessoais, arquivos internos ou qualquer conteúdo que não possa se tornar público caso o repositório seja público.
+
+## API
+
+Substitua:
+
+- `SUA_URL` pela URL do Worker, sem barra final.
+- `SEU_UPLOAD_TOKEN` pelo token configurado como secret.
+
+### Health check e painel
 
 ```text
-https://cdn.jsdelivr.net/gh/USUARIO/REPOSITORIO@BRANCH/caminho/do/arquivo.png
+GET /
 ```
 
-Exemplo ilustrativo:
+A raiz entrega o painel web estático.
+
+### Estatísticas
 
 ```text
-https://cdn.jsdelivr.net/gh/meuusuario/minha-cdn-assets@main/images/logo.webp
+GET /api/stats
 ```
 
-> ⚠️ Para conteúdo que deve permanecer imutável, prefira referenciar uma tag ou commit em vez de uma branch móvel, quando a sua estratégia de publicação permitir. Isso evita que o mesmo endereço entregue um arquivo alterado posteriormente.
+```bash
+curl https://SUA_URL/api/stats \
+  -H "Authorization: Bearer SEU_UPLOAD_TOKEN"
+```
 
----
+Resposta típica:
+
+```json
+{
+  "success": true,
+  "stats": {
+    "total": 12,
+    "total_size": 4583921
+  }
+}
+```
+
+### Upload
+
+```text
+POST /api/upload
+```
+
+Envie `multipart/form-data` com o arquivo no campo `image`, o projeto no campo `project` e o token no campo `token` ou no header `Authorization`.
+
+```bash
+curl -X POST https://SUA_URL/api/upload \
+  -H "Authorization: Bearer SEU_UPLOAD_TOKEN" \
+  -F "project=meu-projeto" \
+  -F "image=@banner.webp"
+```
+
+Resposta típica:
+
+```json
+{
+  "success": true,
+  "urls": {
+    "cloudflare": "",
+    "jsdelivr": "https://cdn.jsdelivr.net/gh/USUARIO/REPOSITORIO@main/meu-projeto/2026/08/banner_123456789.webp",
+    "raw": "https://raw.githubusercontent.com/USUARIO/REPOSITORIO/main/meu-projeto/2026/08/banner_123456789.webp",
+    "github": "https://github.com/USUARIO/REPOSITORIO/blob/main/meu-projeto/2026/08/banner_123456789.webp"
+  }
+}
+```
+
+### Listar uploads
+
+```text
+GET /api/uploads
+GET /api/uploads?project=meu-projeto
+```
+
+```bash
+curl "https://SUA_URL/api/uploads?project=meu-projeto" \
+  -H "Authorization: Bearer SEU_UPLOAD_TOKEN"
+```
+
+A listagem retorna até 100 registros, ordenados do upload mais recente para o mais antigo.
+
+### Renomear upload
+
+```text
+PUT /api/uploads
+```
+
+```bash
+curl -X PUT https://SUA_URL/api/uploads \
+  -H "Authorization: Bearer SEU_UPLOAD_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": 42,
+    "new_name": "banner-promocional-agosto"
+  }'
+```
+
+A operação cria o novo arquivo no GitHub, remove o arquivo anterior e atualiza os caminhos e URLs persistidos no D1.
+
+### Excluir upload
+
+```text
+DELETE /api/uploads
+```
+
+```bash
+curl -X DELETE https://SUA_URL/api/uploads \
+  -H "Authorization: Bearer SEU_UPLOAD_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 42}'
+```
+
+A exclusão remove o conteúdo no GitHub e o registro correspondente no D1. Se o arquivo já não existir no GitHub, o registro D1 ainda poderá ser removido para reparar uma inconsistência histórica.
+
+## URLs de entrega
+
+Cada upload devolve URLs úteis para diferentes cenários.
+
+| URL | Uso recomendado |
+|---|---|
+| `github` | Visualização e auditoria no GitHub |
+| `raw` | Desenvolvimento, inspeção e consumo direto de conteúdo bruto |
+| `jsdelivr` | CDN pública para repositórios públicos GitHub |
+| `cloudflare` | URL opcional quando `CDN_BASE_URL` estiver configurada |
+
+### jsDelivr
+
+A URL jsDelivr segue esta estrutura:
+
+```text
+https://cdn.jsdelivr.net/gh/USUARIO/REPOSITORIO@BRANCH/caminho/do/arquivo.ext
+```
+
+Exemplo:
+
+```text
+https://cdn.jsdelivr.net/gh/meuusuario/minha-cdn-assets@main/imagens/2026/08/logo.webp
+```
+
+Para conteúdo imutável, considere usar tags ou commits na estratégia de publicação em vez de uma branch móvel, quando isso for compatível com seu fluxo.
 
 ## Domínio personalizado
 
-Você pode adicionar domínios próprios aos dois componentes:
-
-| Componente | Exemplo | Uso |
-|---|---|---|
-| Cloudflare Worker | `api.cdn.seudominio.com` | API de upload, gerenciamento e autenticação |
-| Cloudflare Pages | `cdn.seudominio.com` | Painel administrativo web |
-
-### Configurar no Cloudflare
+Para usar um endereço como `cdn.seudominio.com`:
 
 1. Garanta que o domínio esteja no Cloudflare e com DNS gerenciado pela Cloudflare.
-2. Abra o Worker ou projeto Pages desejado em **Workers & Pages**.
-3. Abra **Custom Domains** ou **Triggers**, conforme a tela do produto.
-4. Clique em **Add Custom Domain**.
-5. Informe o subdomínio desejado e conclua o fluxo.
-6. Se você alterar o domínio do Worker, atualize `WORKER_API_URL` no projeto Pages e faça um novo deploy do Pages.
+2. Abra **Workers & Pages** no painel Cloudflare.
+3. Selecione o Worker implantado.
+4. Abra **Triggers** ou **Custom Domains**.
+5. Clique em **Add Custom Domain**.
+6. Informe o subdomínio desejado e conclua o fluxo.
+7. Se usar o domínio como CDN de arquivos, configure `CDN_BASE_URL` como `https://cdn.seudominio.com`.
 
----
-
-## Diagnóstico
-
-### Checklist pós-implantação
-
-- [ ] O `schema.sql` foi executado no banco D1 correto.
-- [ ] O Worker possui o binding D1 chamado exatamente `DB`.
-- [ ] `GITHUB_USER` e `GITHUB_REPO` apontam para o repositório de assets correto.
-- [ ] `GITHUB_TOKEN` está cadastrado como secret e tem permissão de escrita no repositório.
-- [ ] `UPLOAD_TOKEN` está cadastrado como secret e não foi exposto no frontend.
-- [ ] `WORKER_API_URL` usa a URL do Worker sem barra final.
-- [ ] O Pages foi publicado com `bash build.sh` e diretório `public`.
-- [ ] Um upload de teste cria o arquivo no repositório de assets.
-
-### Problemas comuns
-
-| Sintoma | Causa provável | Como corrigir |
-|---|---|---|
-| O painel abre, mas o upload falha | `WORKER_API_URL` está incorreta ou o Worker não foi implantado | Confirme a URL do Worker, sem `/` final, e faça novo deploy do Pages |
-| Erro de autenticação GitHub | Token expirado, sem permissão ou repositório errado | Gere/atualize o token com acesso ao repositório e atualize `GITHUB_TOKEN` |
-| Erro de banco ou tabela inexistente | `schema.sql` não foi executado ou binding está errado | Execute o schema no D1 e confirme o binding `DB` |
-| Worker não encontra o banco | Binding foi criado com nome diferente de `DB` | Edite o binding e use exatamente `DB` |
-| Upload aparece em outro repositório | `GITHUB_USER` ou `GITHUB_REPO` contém valor incorreto | Corrija as variáveis no Worker e faça deploy |
-| Pages falha no build | Comando ou diretório de saída não correspondem ao projeto | Use `bash build.sh` e `public`; consulte os logs de build |
-| Arquivo não abre pelo jsDelivr | Repositório/branch/caminho inválido ou conteúdo privado | Revise a URL, visibilidade e disponibilidade do repositório |
-| Página pede token continuamente | `UPLOAD_TOKEN` informado não coincide com o secret do Worker | Atualize o secret ou use o token correto |
-
----
+> 📌 `CDN_BASE_URL` é opcional. Caso não seja configurada, o painel continua devolvendo URLs GitHub, Raw e jsDelivr normalmente.
 
 ## Desenvolvimento local (opcional)
 
-Esta seção é somente para quem pretende alterar o código. Ela não é necessária para a instalação pelo navegador.
+Esta seção é somente para quem deseja modificar o projeto. Ela não é necessária para usar o Deploy Button.
 
-### Pré-requisitos locais
+### Pré-requisitos
 
-- Node.js 18 ou superior
-- npm
-- Git
-- Wrangler CLI
-- Credenciais Cloudflare e GitHub para ambiente de desenvolvimento
+- Node.js 18 ou superior.
+- npm.
+- Git.
+- Wrangler CLI.
+- Conta Cloudflare e credenciais de desenvolvimento.
 
-### Preparar o projeto
+### Instalação
 
 ```bash
-git clone https://github.com/SEU_USUARIO/cdn-manager-worker.git
-cd cdn-manager-worker
+git clone https://github.com/samucamg/verodesk-cdn-github.git
+cd verodesk-cdn-github
 npm install
+cp .dev.vars.example .dev.vars
 ```
 
-Configure as variáveis locais sem publicar segredos. Use arquivos ignorados pelo Git e siga o contrato de bindings e variáveis do projeto.
+Edite `.dev.vars` somente no seu ambiente local:
 
-### Validação antes de publicar alterações
+```dotenv
+GITHUB_TOKEN=seu_token_de_desenvolvimento
+UPLOAD_TOKEN=um_token_local_longo_e_aleatorio
+```
+
+Nunca faça commit de `.dev.vars`.
+
+### Banco D1 local
 
 ```bash
-npm run build
-npx tsc --noEmit
-git diff --check
-git status
+npm run migrate:local
 ```
 
-> 🧪 Mudanças no `schema.sql`, nos bindings D1, nas variáveis de ambiente ou no contrato de API devem ser testadas em ambiente de desenvolvimento antes de chegar à produção.
+### Executar localmente
 
----
+```bash
+npm run dev
+```
+
+### Validar e publicar manualmente
+
+```bash
+npm run typecheck
+npm run migrate:remote
+npx wrangler deploy
+```
+
+Ou use o script integrado:
+
+```bash
+npm run deploy
+```
+
+O script de deploy executa validação TypeScript, aplica migrations remotas pelo binding `DB` e implanta o Worker.
+
+## Diagnóstico
+
+### Checklist pós-deploy
+
+- [ ] A URL raiz abre o painel do CDN Manager.
+- [ ] O painel aceita `UPLOAD_TOKEN` válido.
+- [ ] O D1 está associado ao binding chamado exatamente `DB`.
+- [ ] A migration `0001_initial.sql` foi aplicada.
+- [ ] `GITHUB_USER`, `GITHUB_REPO` e `GITHUB_BRANCH` apontam para o destino correto.
+- [ ] `GITHUB_TOKEN` possui escrita no repositório de assets.
+- [ ] Um upload de teste aparece no repositório GitHub.
+- [ ] A URL jsDelivr abre o arquivo, quando o repositório é público.
+
+### Problemas comuns
+
+| Sintoma | Causa provável | Solução |
+|---|---|---|
+| `401 Não autorizado` | `UPLOAD_TOKEN` ausente ou inválido | Confira o token no painel ou no header `Authorization` |
+| `502 GitHub HTTP 401/403` | Token GitHub expirado, sem escrita ou repositório incorreto | Gere um novo PAT limitado ao repositório e atualize `GITHUB_TOKEN` |
+| `502 GitHub HTTP 404` | Usuário, repositório ou branch não existe | Revise `GITHUB_USER`, `GITHUB_REPO` e `GITHUB_BRANCH` |
+| `502 GitHub HTTP 422` | Nome/caminho inválido ou conflito ao gravar arquivo | Revise o projeto, nome do arquivo e existência de arquivo com o mesmo destino |
+| Erro de tabela D1 | Migration não foi aplicada ou binding está errado | Confirme `DB` e execute `npm run migrate:remote` |
+| Upload excede limite | Arquivo maior que 10 MB | Reduza, comprima ou divida o arquivo antes de enviar |
+| Extensão inválida | Tipo de arquivo fora da lista permitida | Use uma extensão suportada ou altere `ALLOWED_EXTENSIONS` no código |
+| jsDelivr não abre | Repositório privado, URL incorreta ou cache | Confirme visibilidade, branch e caminho do arquivo |
+| URL Cloudflare vazia | `CDN_BASE_URL` não foi configurada | É esperado; use jsDelivr/Raw ou configure um domínio próprio |
+
+## Contribuições
+
+1. Faça um fork do repositório.
+2. Crie uma branch de funcionalidade.
+3. Mantenha mudanças de API e schema documentadas.
+4. Execute `npm run typecheck` e testes aplicáveis.
+5. Abra um Pull Request explicando impacto, compatibilidade e migrações necessárias.
 
 ## Licença
 
