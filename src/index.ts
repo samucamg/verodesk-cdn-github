@@ -15,15 +15,11 @@ const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', '
 
 export default {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-        const corsHeaders = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        // Seguranca: CORS wildcard removido. Dependemos da politica de Same-Origin nativa do Worker.
+        const defaultHeaders = {
+            'Content-Type': 'application/json',
+            'X-Content-Type-Options': 'nosniff'
         };
-
-        if (request.method === 'OPTIONS') {
-            return new Response(null, { headers: corsHeaders });
-        }
 
         const url = new URL(request.url);
 
@@ -36,10 +32,12 @@ export default {
 
         try {
             if (url.pathname === '/api/stats' && request.method === 'GET') {
-                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: corsHeaders });
-                const { results } = await env.DB.prepare("SELECT count(*) as total, sum(file_size) as total_size FROM uploads").all();
+                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
+                
+                // Seguranca: COALESCE adicionado para impedir que sum() retorne nulo e quebre o frontend
+                const { results } = await env.DB.prepare("SELECT count(*) as total, COALESCE(sum(file_size), 0) as total_size FROM uploads").all();
                 return new Response(JSON.stringify({ success: true, stats: results[0] }), {
-                    headers: { 'Content-Type': 'application/json', ...corsHeaders }
+                    headers: defaultHeaders
                 });
             }
 
@@ -49,19 +47,24 @@ export default {
 
                 const isTokenValid = token === env.UPLOAD_TOKEN;
                 if (!isTokenValid && !checkAuth(request)) {
-                    return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: corsHeaders });
+                    return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                 }
 
                 const project = formData.get('project') as string;
                 const file = formData.get('image') as File | null;
 
-                if (!file || !project) return new Response(JSON.stringify({ success: false, error: 'Dados incompletos' }), { status: 400, headers: corsHeaders });
-                if (file.size > MAX_FILE_SIZE) return new Response(JSON.stringify({ success: false, error: 'Excede 10MB' }), { status: 400, headers: corsHeaders });
+                // Seguranca: Validacao Regex estrita para impedir Path Traversal no repositorio
+                if (!project || !/^[a-zA-Z0-9_-]{1,64}$/.test(project)) {
+                    return new Response(JSON.stringify({ success: false, error: 'Identificador de projeto invalido' }), { status: 400, headers: defaultHeaders });
+                }
+
+                if (!file) return new Response(JSON.stringify({ success: false, error: 'Arquivo nao enviado' }), { status: 400, headers: defaultHeaders });
+                if (file.size > MAX_FILE_SIZE) return new Response(JSON.stringify({ success: false, error: 'Excede 10MB' }), { status: 400, headers: defaultHeaders });
 
                 const originalName = file.name;
                 const ext = originalName.split('.').pop()?.toLowerCase() || '';
 
-                if (!ALLOWED_EXTENSIONS.includes(ext)) return new Response(JSON.stringify({ success: false, error: 'Extensao invalida' }), { status: 400, headers: corsHeaders });
+                if (!ALLOWED_EXTENSIONS.includes(ext)) return new Response(JSON.stringify({ success: false, error: 'Extensao invalida' }), { status: 400, headers: defaultHeaders });
 
                 const safeName = originalName.replace(`.${ext}`, '').replace(/[^a-zA-Z0-9_-]/g, '-');
                 const newName = `${safeName}_${Date.now()}.${ext}`;
@@ -91,7 +94,7 @@ export default {
 
                 if (!ghResponse.ok) {
                     const ghError = await ghResponse.text();
-                    return new Response(JSON.stringify({ success: false, error: `GitHub HTTP ${ghResponse.status}`, details: ghError }), { status: 502, headers: corsHeaders });
+                    return new Response(JSON.stringify({ success: false, error: `GitHub HTTP ${ghResponse.status}`, details: ghError }), { status: 502, headers: defaultHeaders });
                 }
 
                 const ghData = await ghResponse.json() as any;
@@ -111,11 +114,11 @@ export default {
                     project, project, originalName, newName, githubPath, file.size, ext, urls.jsdelivr, urls.raw, urls.github, correctSha, 'admin'
                 ).run();
 
-                return new Response(JSON.stringify({ success: true, urls }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+                return new Response(JSON.stringify({ success: true, urls }), { headers: defaultHeaders });
             }
 
             if (url.pathname === '/api/uploads' && request.method === 'GET') {
-                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: corsHeaders });
+                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                 const project = url.searchParams.get('project');
                 let query = "SELECT * FROM uploads ORDER BY upload_date DESC LIMIT 100";
                 let params: string[] = [];
@@ -124,19 +127,22 @@ export default {
                     params.push(project);
                 }
                 const { results } = await env.DB.prepare(query).bind(...params).all();
-                return new Response(JSON.stringify({ success: true, uploads: results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+                return new Response(JSON.stringify({ success: true, uploads: results }), { headers: defaultHeaders });
             }
 
             if (url.pathname === '/api/uploads' && request.method === 'PUT') {
-                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: corsHeaders });
+                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                 const data = await request.json() as any;
                 const { id, new_name } = data;
-                if (!id || !new_name) return new Response(JSON.stringify({ success: false, error: 'Dados invalidos' }), { status: 400, headers: corsHeaders });
+                if (!id || !new_name) return new Response(JSON.stringify({ success: false, error: 'Dados invalidos' }), { status: 400, headers: defaultHeaders });
+
+                // Seguranca: Validacao Regex para renomeacao limpa
+                const safeNewName = new_name.trim().replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                if (!safeNewName) return new Response(JSON.stringify({ success: false, error: 'Nome de arquivo invalido' }), { status: 400, headers: defaultHeaders });
 
                 const fileRecord = await env.DB.prepare("SELECT * FROM uploads WHERE id = ?").bind(id).first() as any;
-                if (!fileRecord) return new Response(JSON.stringify({ success: false, error: 'Arquivo nao encontrado' }), { status: 404, headers: corsHeaders });
+                if (!fileRecord) return new Response(JSON.stringify({ success: false, error: 'Arquivo nao encontrado' }), { status: 404, headers: defaultHeaders });
 
-                const safeNewName = new_name.replace(/[^a-zA-Z0-9_-]/g, '-');
                 const newFileName = `${safeNewName}.${fileRecord.file_extension}`;
                 const pathParts = fileRecord.file_path.split('/');
                 pathParts.pop();
@@ -144,14 +150,14 @@ export default {
 
                 const getUrl = `https://api.github.com/repos/${env.GITHUB_USER}/${env.GITHUB_REPO}/contents/${fileRecord.file_path}`;
                 const getRes = await fetch(getUrl, { headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'Cloudflare-Worker-CDN' } });
-                if (!getRes.ok) return new Response(JSON.stringify({ success: false, error: 'Falha GitHub GET' }), { status: 502, headers: corsHeaders });
+                if (!getRes.ok) return new Response(JSON.stringify({ success: false, error: 'Falha GitHub GET' }), { status: 502, headers: defaultHeaders });
 
                 const fileData = await getRes.json() as any;
 
                 let fileBase64 = fileData.content;
                 if (!fileBase64 || fileBase64.trim() === '') {
                     const rawFileRes = await fetch(fileRecord.raw_url);
-                    if (!rawFileRes.ok) return new Response(JSON.stringify({ success: false, error: 'Falha ao baixar binario' }), { status: 502, headers: corsHeaders });
+                    if (!rawFileRes.ok) return new Response(JSON.stringify({ success: false, error: 'Falha ao baixar binario' }), { status: 502, headers: defaultHeaders });
                     const arrayBuffer = await rawFileRes.arrayBuffer();
                     fileBase64 = Buffer.from(arrayBuffer).toString('base64');
                 }
@@ -162,30 +168,35 @@ export default {
                     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'Cloudflare-Worker-CDN', 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: `Rename: -> ${newFileName}`, content: fileBase64, branch: branch })
                 });
-                if (!putRes.ok) return new Response(JSON.stringify({ success: false, error: 'Falha GitHub PUT' }), { status: 502, headers: corsHeaders });
+                if (!putRes.ok) return new Response(JSON.stringify({ success: false, error: 'Falha GitHub PUT' }), { status: 502, headers: defaultHeaders });
                 const newFileData = await putRes.json() as any;
 
-                await fetch(getUrl, {
+                const delRes = await fetch(getUrl, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'Cloudflare-Worker-CDN', 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: `Delete old: ${fileRecord.original_name}`, sha: fileData.sha, branch: branch })
                 });
+
+                // Seguranca: Impedir dessincronizacao de banco se o DELETE falhar
+                if (!delRes.ok) {
+                    return new Response(JSON.stringify({ success: false, error: 'Falha ao apagar arquivo antigo no GitHub' }), { status: 502, headers: defaultHeaders });
+                }
 
                 const newCdnUrl = fileRecord.cdn_url.replace(fileRecord.file_name, newFileName);
                 const newRawUrl = fileRecord.raw_url.replace(fileRecord.file_name, newFileName);
                 await env.DB.prepare(`UPDATE uploads SET original_name = ?, file_name = ?, file_path = ?, cdn_url = ?, raw_url = ?, commit_sha = ? WHERE id = ?`)
                     .bind(newFileName, newFileName, newPath, newCdnUrl, newRawUrl, newFileData.content?.sha || 'N/A', id).run();
 
-                return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+                return new Response(JSON.stringify({ success: true }), { headers: defaultHeaders });
             }
 
             if (url.pathname === '/api/uploads' && request.method === 'DELETE') {
-                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: corsHeaders });
+                if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                 const data = await request.json() as any;
-                if (!data.id) return new Response(JSON.stringify({ success: false, error: 'ID invalido' }), { status: 400, headers: corsHeaders });
+                if (!data.id) return new Response(JSON.stringify({ success: false, error: 'ID invalido' }), { status: 400, headers: defaultHeaders });
 
                 const fileRecord = await env.DB.prepare("SELECT * FROM uploads WHERE id = ?").bind(data.id).first() as any;
-                if (!fileRecord) return new Response(JSON.stringify({ success: false, error: 'Nao encontrado' }), { status: 404, headers: corsHeaders });
+                if (!fileRecord) return new Response(JSON.stringify({ success: false, error: 'Nao encontrado' }), { status: 404, headers: defaultHeaders });
 
                 const ghUrl = `https://api.github.com/repos/${env.GITHUB_USER}/${env.GITHUB_REPO}/contents/${fileRecord.file_path}`;
 
@@ -204,14 +215,14 @@ export default {
 
                 if (delRes.ok || delRes.status === 404) {
                     await env.DB.prepare("DELETE FROM uploads WHERE id = ?").bind(data.id).run();
-                    return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
+                    return new Response(JSON.stringify({ success: true }), { headers: defaultHeaders });
                 }
-                return new Response(JSON.stringify({ success: false, error: 'Falha GitHub DELETE' }), { status: 500, headers: corsHeaders });
+                return new Response(JSON.stringify({ success: false, error: 'Falha GitHub DELETE' }), { status: 500, headers: defaultHeaders });
             }
 
-            return new Response(JSON.stringify({ error: "Endpoint invalido" }), { status: 404, headers: corsHeaders });
+            return new Response(JSON.stringify({ error: "Endpoint invalido" }), { status: 404, headers: defaultHeaders });
         } catch (err: any) {
-            return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: corsHeaders });
+            return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: defaultHeaders });
         }
     }
 };
