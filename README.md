@@ -71,16 +71,17 @@ O ecossistema VeroDesk e VeroCast oferece três caminhos para hospedagem e entre
 
 ### Quando escolher esta edição
 
-Escolha o **VeroDesk CDN — Google Drive** quando precisar reduzir custos de storage e publicar arquivos maiores que o limite prático da edição GitHub. O upload resumable divide arquivos em blocos de 5 MB, permitindo o envio de até 1,5 GB sem depender de uma única requisição acima do limite do Cloudflare.
+Escolha o **VeroDesk CDN — GitHub** para assets leves e públicos que se beneficiam das URLs de entrega do GitHub e do cache global do jsDelivr. É a alternativa direta para sites, blogs, landing pages e e-commerces que precisam publicar imagens, documentos e áudios curtos sem manter uma infraestrutura de storage própria.
 
-Esta edição é indicada para mídia de distribuição geral: materiais didáticos, PDFs, downloads, áudios longos e vídeos promocionais. Ela fornece player HTML5 e embed responsivo para os formatos compatíveis, mas não foi projetada para impedir de forma rigorosa o compartilhamento de uma aula paga ou a gravação de tela.
+O limite de arquivo é de 10 MB e a origem é um repositório GitHub. Por isso, não é a edição indicada para vídeos longos, materiais pesados ou armazenamento de grande volume. Para esses cenários, utilize a edição Google Drive; para aulas e conteúdo comercial que demandem proteção reforçada, utilize o VeroCast DRM.
 
 ### Outras soluções do ecossistema
 
-- Para assets leves, estáticos e com distribuição pública agressivamente cacheada pelo jsDelivr, conheça o [VeroDesk CDN — Edição GitHub](https://github.com/samucamg/verodesk-cdn-github).
+- Para arquivos maiores, upload resumable em blocos de 5 MB, player HTML5 e entrega por proxy de borda, conheça o [VeroDesk CDN — Edição Google Drive](https://github.com/samucamg/verodesk-cdn-gdrive).
 - Para vídeos que constituem o produto principal e exigem controles comerciais de acesso, conheça o **VeroCast DRM**, solução comercial utilizada na arquitetura de vídeo do [VeroClass AI](https://github.com/samucamg/VeroClassAi), plataforma da [Inglês Curso Idiomas](https://www.inglescurso.com.br).
 
 > 📌 Os dois projetos VeroDesk são gratuitos e de código aberto. O VeroCast DRM é uma solução comercial, projetada para ser adaptada à infraestrutura, ao domínio e às regras de acesso de cada cliente.
+
 ## Arquitetura
 
 ```text
